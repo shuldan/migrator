@@ -196,8 +196,6 @@ func TestMigrator_buildRollbackList(t *testing.T) {
 		{ID: "3", Batch: 2, AppliedAt: &now},
 		{ID: "4", Batch: 3, AppliedAt: &now},
 	}
-
-	// Sort applied migrations as expected by the function
 	sort.Slice(applied, func(i, j int) bool {
 		return applied[i].Batch > applied[j].Batch ||
 			(applied[i].Batch == applied[j].Batch && applied[i].ID > applied[j].ID)
@@ -259,8 +257,6 @@ func TestMigrator_executeMigrationUp_EmptyQuery(t *testing.T) {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
 	defer db.Close()
-
-	// Create the schema_migrations table first
 	_, err = db.Exec(migrationTableSQL)
 	if err != nil {
 		t.Fatalf("failed to create schema_migrations table: %v", err)
@@ -290,8 +286,6 @@ func TestMigrator_executeMigrationUp_QueryError(t *testing.T) {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
 	defer db.Close()
-
-	// Create the schema_migrations table first
 	_, err = db.Exec(migrationTableSQL)
 	if err != nil {
 		t.Fatalf("failed to create schema_migrations table: %v", err)
@@ -325,8 +319,6 @@ func TestMigrator_executeMigrationUp_InsertError(t *testing.T) {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
 	defer db.Close()
-
-	// Create the schema_migrations table first
 	_, err = db.Exec(migrationTableSQL)
 	if err != nil {
 		t.Fatalf("failed to create schema_migrations table: %v", err)
@@ -335,8 +327,6 @@ func TestMigrator_executeMigrationUp_InsertError(t *testing.T) {
 	migrator := New(db)
 	tx, _ := db.BeginTx(context.Background(), nil)
 	defer func() { _ = tx.Rollback() }()
-
-	// Insert a record with the same ID to cause a conflict
 	_, err = tx.ExecContext(context.Background(), "INSERT INTO schema_migrations (id, description, batch) VALUES (?, ?, ?)", "1", "test", 1)
 	if err != nil {
 		t.Fatalf("failed to insert initial record: %v", err)
@@ -365,8 +355,6 @@ func TestMigrator_deleteMigrationRecord(t *testing.T) {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
 	defer db.Close()
-
-	// Create the schema_migrations table first
 	_, err = db.Exec(migrationTableSQL)
 	if err != nil {
 		t.Fatalf("failed to create schema_migrations table: %v", err)
@@ -426,8 +414,6 @@ func TestMigrator_rollbackSingleMigration_NotFound(t *testing.T) {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
 	defer db.Close()
-
-	// Create the schema_migrations table first
 	_, err = db.Exec(migrationTableSQL)
 	if err != nil {
 		t.Fatalf("failed to create schema_migrations table: %v", err)
@@ -454,8 +440,6 @@ func TestMigrator_rollbackSingleMigration_EmptyDown(t *testing.T) {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
 	defer db.Close()
-
-	// Create the schema_migrations table first
 	_, err = db.Exec(migrationTableSQL)
 	if err != nil {
 		t.Fatalf("failed to create schema_migrations table: %v", err)
@@ -491,8 +475,6 @@ func TestMigrator_rollbackSingleMigration_DownWithComments(t *testing.T) {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
 	defer db.Close()
-
-	// Create the schema_migrations table first
 	_, err = db.Exec(migrationTableSQL)
 	if err != nil {
 		t.Fatalf("failed to create schema_migrations table: %v", err)
@@ -539,8 +521,6 @@ func TestMigrator_rollbackSingleMigration_DownError(t *testing.T) {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
 	defer db.Close()
-
-	// Create the schema_migrations table first
 	_, err = db.Exec(migrationTableSQL)
 	if err != nil {
 		t.Fatalf("failed to create schema_migrations table: %v", err)
@@ -608,7 +588,8 @@ func TestMigrator_MigrateUp_NoMigrations(t *testing.T) {
 	defer db.Close()
 
 	migrator := New(db)
-	err = migrator.MigrateUp([]Migration{})
+	migrator.Register([]Migration{}...)
+	err = migrator.Up()
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
 	}
@@ -637,7 +618,8 @@ func TestMigrator_MigrateUp_Success(t *testing.T) {
 	}
 
 	migrator := New(db)
-	err = migrator.MigrateUp(migrations)
+	migrator.Register(migrations...)
+	err = migrator.Up()
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
 	}
@@ -676,11 +658,12 @@ func TestMigrator_MigrateUp_AlreadyApplied(t *testing.T) {
 	}
 
 	migrator := New(db)
-	err = migrator.MigrateUp(migrations)
+	migrator.Register(migrations...)
+	err = migrator.Up()
 	if err != nil {
 		t.Fatalf("failed to apply initial migrations: %v", err)
 	}
-	err = migrator.MigrateUp(migrations)
+	err = migrator.Up()
 	if err != nil {
 		t.Errorf("expected no error when applying already applied migrations, got %v", err)
 	}
@@ -712,7 +695,8 @@ func TestMigrator_MigrateUp_TransactionError(t *testing.T) {
 	}
 
 	migrator := New(db)
-	err = migrator.MigrateUp(migrations)
+	migrator.Register(migrations...)
+	err = migrator.Up()
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -732,7 +716,8 @@ func TestMigrator_MigrateDown_NoMigrations(t *testing.T) {
 	defer db.Close()
 
 	migrator := New(db)
-	err = migrator.MigrateDown(1, []Migration{})
+	migrator.Register([]Migration{}...)
+	err = migrator.Down(1)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -761,11 +746,12 @@ func TestMigrator_MigrateDown_Success(t *testing.T) {
 	}
 
 	migrator := New(db)
-	err = migrator.MigrateUp(migrations)
+	migrator.Register(migrations...)
+	err = migrator.Up()
 	if err != nil {
 		t.Fatalf("failed to apply migrations: %v", err)
 	}
-	err = migrator.MigrateDown(1, migrations)
+	err = migrator.Down(1)
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
 	}
@@ -796,7 +782,8 @@ func TestMigrator_MigrateDown_TransactionError(t *testing.T) {
 	db.Close()
 
 	migrator := New(db)
-	err = migrator.MigrateDown(1, []Migration{})
+	migrator.Register([]Migration{}...)
+	err = migrator.Down(1)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -824,7 +811,8 @@ func TestMigrator_Status_Success(t *testing.T) {
 	}
 
 	migrator := New(db)
-	err = migrator.MigrateUp(migrations)
+	migrator.Register(migrations...)
+	err = migrator.Up()
 	if err != nil {
 		t.Fatalf("failed to apply migrations: %v", err)
 	}
@@ -878,8 +866,6 @@ func TestMigrator_executeMigrationBatch_Success(t *testing.T) {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
 	defer db.Close()
-
-	// Create the schema_migrations table first
 	_, err = db.Exec(migrationTableSQL)
 	if err != nil {
 		t.Fatalf("failed to create schema_migrations table: %v", err)
@@ -944,8 +930,6 @@ func TestMigrator_executeRollback_Success(t *testing.T) {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
 	defer db.Close()
-
-	// Create the schema_migrations table first
 	_, err = db.Exec(migrationTableSQL)
 	if err != nil {
 		t.Fatalf("failed to create schema_migrations table: %v", err)
@@ -1016,8 +1000,6 @@ func TestMigrator_getAppliedMigrations_Success(t *testing.T) {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
 	defer db.Close()
-
-	// Create the schema_migrations table first
 	_, err = db.Exec(migrationTableSQL)
 	if err != nil {
 		t.Fatalf("failed to create schema_migrations table: %v", err)

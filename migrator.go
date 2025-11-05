@@ -24,15 +24,22 @@ CREATE INDEX IF NOT EXISTS idx_schema_migrations_batch ON schema_migrations(batc
 `
 
 type Migrator struct {
-	db *sql.DB
-	mu sync.Mutex
+	db         *sql.DB
+	mu         sync.Mutex
+	migrations []Migration
 }
 
 func New(db *sql.DB) *Migrator {
 	return &Migrator{db: db}
 }
 
-func (r *Migrator) MigrateUp(migrations []Migration) error {
+func (m *Migrator) Register(migration ...Migration) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.migrations = append(m.migrations, migration...)
+}
+
+func (r *Migrator) Up() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	ctx := context.Background()
@@ -47,11 +54,11 @@ func (r *Migrator) MigrateUp(migrations []Migration) error {
 		appliedMap[a.ID] = true
 	}
 
+	migrations := r.migrations
+
 	sort.Slice(migrations, func(i, j int) bool {
 		return migrations[i].ID() < migrations[j].ID()
 	})
-
-	nextBatch := r.getNextBatchNumber(applied)
 
 	var newMigrations []Migration
 	for _, migration := range migrations {
@@ -64,10 +71,12 @@ func (r *Migrator) MigrateUp(migrations []Migration) error {
 		return nil
 	}
 
+	nextBatch := r.getNextBatchNumber(applied)
+
 	return r.executeMigrationBatch(ctx, newMigrations, nextBatch)
 }
 
-func (r *Migrator) MigrateDown(steps int, migrations []Migration) error {
+func (r *Migrator) Down(steps int) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	ctx := context.Background()
@@ -81,7 +90,7 @@ func (r *Migrator) MigrateDown(steps int, migrations []Migration) error {
 		return ErrNoMigrationsToRollback
 	}
 
-	migrationMap := r.buildMigrationMap(migrations)
+	migrationMap := r.buildMigrationMap(r.migrations)
 	rollbackList := r.buildRollbackList(applied, steps)
 
 	return r.executeRollback(ctx, rollbackList, migrationMap)

@@ -46,7 +46,9 @@ func TestMigrator_New(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	migrator := New(db)
 	if migrator == nil {
@@ -64,7 +66,9 @@ func TestMigrator_createMigrationTable_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	migrator := New(db)
 	err = migrator.createMigrationTable()
@@ -97,7 +101,9 @@ func TestMigrator_createMigrationTable_CreateTableError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	db.Close()
+	func() {
+		_ = db.Close()
+	}()
 
 	migrator := New(db)
 	err = migrator.createMigrationTable()
@@ -256,7 +262,9 @@ func TestMigrator_executeMigrationUp_EmptyQuery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 	_, err = db.Exec(migrationTableSQL)
 	if err != nil {
 		t.Fatalf("failed to create schema_migrations table: %v", err)
@@ -285,7 +293,9 @@ func TestMigrator_executeMigrationUp_QueryError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 	_, err = db.Exec(migrationTableSQL)
 	if err != nil {
 		t.Fatalf("failed to create schema_migrations table: %v", err)
@@ -318,7 +328,9 @@ func TestMigrator_executeMigrationUp_InsertError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 	_, err = db.Exec(migrationTableSQL)
 	if err != nil {
 		t.Fatalf("failed to create schema_migrations table: %v", err)
@@ -354,7 +366,9 @@ func TestMigrator_deleteMigrationRecord(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 	_, err = db.Exec(migrationTableSQL)
 	if err != nil {
 		t.Fatalf("failed to create schema_migrations table: %v", err)
@@ -394,7 +408,9 @@ func TestMigrator_deleteMigrationRecord_Error(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	migrator := New(db)
 	tx, _ := db.BeginTx(context.Background(), nil)
@@ -413,7 +429,9 @@ func TestMigrator_rollbackSingleMigration_NotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 	_, err = db.Exec(migrationTableSQL)
 	if err != nil {
 		t.Fatalf("failed to create schema_migrations table: %v", err)
@@ -439,7 +457,9 @@ func TestMigrator_rollbackSingleMigration_EmptyDown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 	_, err = db.Exec(migrationTableSQL)
 	if err != nil {
 		t.Fatalf("failed to create schema_migrations table: %v", err)
@@ -474,7 +494,9 @@ func TestMigrator_rollbackSingleMigration_DownWithComments(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 	_, err = db.Exec(migrationTableSQL)
 	if err != nil {
 		t.Fatalf("failed to create schema_migrations table: %v", err)
@@ -520,7 +542,9 @@ func TestMigrator_rollbackSingleMigration_DownError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 	_, err = db.Exec(migrationTableSQL)
 	if err != nil {
 		t.Fatalf("failed to create schema_migrations table: %v", err)
@@ -559,7 +583,9 @@ func TestMigrator_rollbackSingleMigration_DeleteError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	migrator := New(db)
 	tx, _ := db.BeginTx(context.Background(), nil)
@@ -585,7 +611,9 @@ func TestMigrator_MigrateUp_NoMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	migrator := New(db)
 	migrator.Register([]Migration{}...)
@@ -602,7 +630,9 @@ func TestMigrator_MigrateUp_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	migrations := []Migration{
 		&mockMigration{
@@ -647,7 +677,9 @@ func TestMigrator_MigrateUp_AlreadyApplied(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	migrations := []Migration{
 		&mockMigration{
@@ -684,7 +716,9 @@ func TestMigrator_MigrateUp_TransactionError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	db.Close()
+	func() {
+		_ = db.Close()
+	}()
 
 	migrations := []Migration{
 		&mockMigration{
@@ -713,7 +747,9 @@ func TestMigrator_MigrateDown_NoMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	migrator := New(db)
 	migrator.Register([]Migration{}...)
@@ -734,7 +770,9 @@ func TestMigrator_MigrateDown_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	migrations := []Migration{
 		&mockMigration{
@@ -779,7 +817,9 @@ func TestMigrator_MigrateDown_TransactionError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	db.Close()
+	func() {
+		_ = db.Close()
+	}()
 
 	migrator := New(db)
 	migrator.Register([]Migration{}...)
@@ -800,7 +840,9 @@ func TestMigrator_Status_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	migrations := []Migration{
 		&mockMigration{
@@ -849,7 +891,9 @@ func TestMigrator_Status_Error(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	db.Close()
+	func() {
+		_ = db.Close()
+	}()
 
 	migrator := New(db)
 	_, err = migrator.Status()
@@ -865,7 +909,9 @@ func TestMigrator_executeMigrationBatch_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 	_, err = db.Exec(migrationTableSQL)
 	if err != nil {
 		t.Fatalf("failed to create schema_migrations table: %v", err)
@@ -901,7 +947,9 @@ func TestMigrator_executeMigrationBatch_TransactionError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	db.Close()
+	func() {
+		_ = db.Close()
+	}()
 
 	migrator := New(db)
 	migrations := []Migration{
@@ -929,7 +977,9 @@ func TestMigrator_executeRollback_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 	_, err = db.Exec(migrationTableSQL)
 	if err != nil {
 		t.Fatalf("failed to create schema_migrations table: %v", err)
@@ -974,7 +1024,9 @@ func TestMigrator_executeRollback_TransactionError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	db.Close()
+	func() {
+		_ = db.Close()
+	}()
 
 	migrator := New(db)
 	rollbackList := []MigrationStatus{
@@ -999,7 +1051,9 @@ func TestMigrator_getAppliedMigrations_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 	_, err = db.Exec(migrationTableSQL)
 	if err != nil {
 		t.Fatalf("failed to create schema_migrations table: %v", err)
@@ -1041,7 +1095,9 @@ func TestMigrator_getAppliedMigrations_CreateTableError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	db.Close()
+	func() {
+		_ = db.Close()
+	}()
 
 	migrator := New(db)
 	_, err = migrator.getAppliedMigrations(context.Background())
@@ -1061,7 +1117,9 @@ func TestMigrator_getAppliedMigrations_QueryError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	_, err = db.Exec(`
 CREATE TABLE schema_migrations (

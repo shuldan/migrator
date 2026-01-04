@@ -27,10 +27,18 @@ type Migrator struct {
 	db         *sql.DB
 	mu         sync.Mutex
 	migrations []Migration
+	dialect    Dialect
 }
 
 func New(db *sql.DB) *Migrator {
-	return &Migrator{db: db}
+	return &Migrator{
+		db:      db,
+		dialect: detectDialect(db),
+	}
+}
+
+func (m *Migrator) Dialect() Dialect {
+	return m.dialect
 }
 
 func (m *Migrator) Register(migration ...Migration) {
@@ -39,12 +47,12 @@ func (m *Migrator) Register(migration ...Migration) {
 	m.migrations = append(m.migrations, migration...)
 }
 
-func (r *Migrator) Up() error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+func (m *Migrator) Up() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	ctx := context.Background()
 
-	applied, err := r.getAppliedMigrations(ctx)
+	applied, err := m.getAppliedMigrations(ctx)
 	if err != nil {
 		return errors.Join(ErrFailedToGetAppliedMigrations, err)
 	}
@@ -54,7 +62,7 @@ func (r *Migrator) Up() error {
 		appliedMap[a.ID] = true
 	}
 
-	migrations := r.migrations
+	migrations := m.migrations
 
 	sort.Slice(migrations, func(i, j int) bool {
 		return migrations[i].ID() < migrations[j].ID()
@@ -71,17 +79,17 @@ func (r *Migrator) Up() error {
 		return nil
 	}
 
-	nextBatch := r.getNextBatchNumber(applied)
+	nextBatch := m.getNextBatchNumber(applied)
 
-	return r.executeMigrationBatch(ctx, newMigrations, nextBatch)
+	return m.executeMigrationBatch(ctx, newMigrations, nextBatch)
 }
 
-func (r *Migrator) Down(steps int) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+func (m *Migrator) Down(steps int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	ctx := context.Background()
 
-	applied, err := r.getAppliedMigrations(ctx)
+	applied, err := m.getAppliedMigrations(ctx)
 	if err != nil {
 		return errors.Join(ErrFailedToGetAppliedMigrations, err)
 	}
@@ -90,25 +98,25 @@ func (r *Migrator) Down(steps int) error {
 		return ErrNoMigrationsToRollback
 	}
 
-	migrationMap := r.buildMigrationMap(r.migrations)
-	rollbackList := r.buildRollbackList(applied, steps)
+	migrationMap := m.buildMigrationMap(m.migrations)
+	rollbackList := m.buildRollbackList(applied, steps)
 
-	return r.executeRollback(ctx, rollbackList, migrationMap)
+	return m.executeRollback(ctx, rollbackList, migrationMap)
 }
 
-func (r *Migrator) Status() ([]MigrationStatus, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.getAppliedMigrations(context.Background())
+func (m *Migrator) Status() ([]MigrationStatus, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.getAppliedMigrations(context.Background())
 }
 
-func (r *Migrator) createMigrationTable() error {
-	_, err := r.db.Exec(migrationTableSQL)
+func (m *Migrator) createMigrationTable() error {
+	_, err := m.db.Exec(migrationTableSQL)
 	if err != nil {
 		return errors.Join(ErrFailedToCreateSchemaMigrationsTable, err)
 	}
 
-	_, err = r.db.Exec(migrationTableIndexSQL)
+	_, err = m.db.Exec(migrationTableIndexSQL)
 	if err != nil {
 		return errors.Join(ErrFailedToCreateSchemaMigrationsIndex, err)
 	}
@@ -116,8 +124,8 @@ func (r *Migrator) createMigrationTable() error {
 	return nil
 }
 
-func (r *Migrator) executeMigrationBatch(ctx context.Context, migrations []Migration, batch int) error {
-	tx, err := r.db.BeginTx(ctx, nil)
+func (m *Migrator) executeMigrationBatch(ctx context.Context, migrations []Migration, batch int) error {
+	tx, err := m.db.BeginTx(ctx, nil)
 	if err != nil {
 		return errors.Join(ErrFailedToBeginTransaction, err)
 	}
@@ -129,7 +137,7 @@ func (r *Migrator) executeMigrationBatch(ctx context.Context, migrations []Migra
 	}()
 
 	for _, migration := range migrations {
-		if err := r.executeMigrationUp(ctx, tx, migration, batch); err != nil {
+		if err := m.executeMigrationUp(ctx, tx, migration, batch); err != nil {
 			return errors.Join(ErrMigrationFailed, err)
 		}
 	}
@@ -142,15 +150,15 @@ func (r *Migrator) executeMigrationBatch(ctx context.Context, migrations []Migra
 	return nil
 }
 
-func (r *Migrator) buildMigrationMap(migrations []Migration) map[string]Migration {
+func (m *Migrator) buildMigrationMap(migrations []Migration) map[string]Migration {
 	migrationMap := make(map[string]Migration)
-	for _, m := range migrations {
-		migrationMap[m.ID()] = m
+	for _, migration := range migrations {
+		migrationMap[migration.ID()] = migration
 	}
 	return migrationMap
 }
 
-func (r *Migrator) buildRollbackList(applied []MigrationStatus, steps int) []MigrationStatus {
+func (m *Migrator) buildRollbackList(applied []MigrationStatus, steps int) []MigrationStatus {
 	sort.Slice(applied, func(i, j int) bool {
 		return applied[i].Batch > applied[j].Batch ||
 			(applied[i].Batch == applied[j].Batch && applied[i].ID > applied[j].ID)
@@ -163,8 +171,8 @@ func (r *Migrator) buildRollbackList(applied []MigrationStatus, steps int) []Mig
 	return applied[:steps]
 }
 
-func (r *Migrator) executeRollback(ctx context.Context, rollbackList []MigrationStatus, migrationMap map[string]Migration) error {
-	tx, err := r.db.BeginTx(ctx, nil)
+func (m *Migrator) executeRollback(ctx context.Context, rollbackList []MigrationStatus, migrationMap map[string]Migration) error {
+	tx, err := m.db.BeginTx(ctx, nil)
 	if err != nil {
 		return errors.Join(ErrFailedToBeginTransaction, err)
 	}
@@ -176,7 +184,7 @@ func (r *Migrator) executeRollback(ctx context.Context, rollbackList []Migration
 	}()
 
 	for _, migrationStatus := range rollbackList {
-		if err := r.rollbackSingleMigration(ctx, tx, migrationStatus, migrationMap); err != nil {
+		if err := m.rollbackSingleMigration(ctx, tx, migrationStatus, migrationMap); err != nil {
 			return err
 		}
 	}
@@ -189,7 +197,7 @@ func (r *Migrator) executeRollback(ctx context.Context, rollbackList []Migration
 	return nil
 }
 
-func (r *Migrator) rollbackSingleMigration(ctx context.Context, tx *sql.Tx, migrationStatus MigrationStatus, migrationMap map[string]Migration) error {
+func (m *Migrator) rollbackSingleMigration(ctx context.Context, tx *sql.Tx, migrationStatus MigrationStatus, migrationMap map[string]Migration) error {
 	if migration, exists := migrationMap[migrationStatus.ID]; exists {
 		for _, query := range migration.Down() {
 			trimmedQuery := strings.TrimSpace(query)
@@ -203,14 +211,14 @@ func (r *Migrator) rollbackSingleMigration(ctx context.Context, tx *sql.Tx, migr
 		}
 	}
 
-	if err := r.deleteMigrationRecord(ctx, tx, migrationStatus.ID); err != nil {
+	if err := m.deleteMigrationRecord(ctx, tx, migrationStatus.ID); err != nil {
 		return errors.Join(ErrMigrationFailed, err)
 	}
 
 	return nil
 }
 
-func (r *Migrator) executeMigrationUp(ctx context.Context, tx *sql.Tx, migration Migration, batch int) error {
+func (m *Migrator) executeMigrationUp(ctx context.Context, tx *sql.Tx, migration Migration, batch int) error {
 	for _, query := range migration.Up() {
 		if strings.TrimSpace(query) == "" {
 			continue
@@ -221,24 +229,24 @@ func (r *Migrator) executeMigrationUp(ctx context.Context, tx *sql.Tx, migration
 		}
 	}
 
-	_, err := tx.ExecContext(ctx,
-		"INSERT INTO schema_migrations (id, description, batch) VALUES (?, ?, ?)",
-		migration.ID(), migration.Description(), batch)
+	query := m.dialect.placeholder("INSERT INTO schema_migrations (id, description, batch) VALUES (?, ?, ?)")
+	_, err := tx.ExecContext(ctx, query, migration.ID(), migration.Description(), batch)
 
 	return err
 }
 
-func (r *Migrator) deleteMigrationRecord(ctx context.Context, tx *sql.Tx, migrationID string) error {
-	_, err := tx.ExecContext(ctx, "DELETE FROM schema_migrations WHERE id = ?", migrationID)
+func (m *Migrator) deleteMigrationRecord(ctx context.Context, tx *sql.Tx, migrationID string) error {
+	query := m.dialect.placeholder("DELETE FROM schema_migrations WHERE id = ?")
+	_, err := tx.ExecContext(ctx, query, migrationID)
 	return err
 }
 
-func (r *Migrator) getAppliedMigrations(ctx context.Context) ([]MigrationStatus, error) {
-	if err := r.createMigrationTable(); err != nil {
+func (m *Migrator) getAppliedMigrations(ctx context.Context) ([]MigrationStatus, error) {
+	if err := m.createMigrationTable(); err != nil {
 		return nil, err
 	}
 	query := "SELECT id, description, applied_at, batch FROM schema_migrations ORDER BY batch, id"
-	rows, err := r.db.QueryContext(ctx, query)
+	rows, err := m.db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -266,7 +274,7 @@ func (r *Migrator) getAppliedMigrations(ctx context.Context) ([]MigrationStatus,
 	return migrations, rows.Err()
 }
 
-func (r *Migrator) getNextBatchNumber(applied []MigrationStatus) int {
+func (m *Migrator) getNextBatchNumber(applied []MigrationStatus) int {
 	maxBatch := 0
 	for _, migration := range applied {
 		if migration.Batch > maxBatch {

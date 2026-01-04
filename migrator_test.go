@@ -1138,3 +1138,109 @@ CREATE TABLE schema_migrations (
 		t.Fatal("expected error, got nil")
 	}
 }
+
+func TestMigrator_Dialect(t *testing.T) {
+	t.Parallel()
+
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		t.Fatalf("failed to open database: %v", err)
+	}
+	defer func() {
+		_ = db.Close()
+	}()
+
+	migrator := New(db)
+	if migrator.Dialect() != DialectSQLite {
+		t.Errorf("expected DialectSQLite, got %v", migrator.Dialect())
+	}
+}
+
+func TestMigrator_executeMigrationUp_WithDialect(t *testing.T) {
+	t.Parallel()
+
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		t.Fatalf("failed to open sqlite database: %v", err)
+	}
+	defer func() {
+		_ = db.Close()
+	}()
+	_, err = db.Exec(migrationTableSQL)
+	if err != nil {
+		t.Fatalf("failed to create schema_migrations table: %v", err)
+	}
+
+	migrator := New(db)
+	tx, _ := db.BeginTx(context.Background(), nil)
+	defer func() { _ = tx.Rollback() }()
+
+	migration := &mockMigration{
+		id:          "1",
+		description: "test migration",
+		upQueries:   []string{"CREATE TABLE test_dialect (id INTEGER)"},
+	}
+
+	err = migrator.executeMigrationUp(context.Background(), tx, migration, 1)
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		t.Fatalf("failed to commit transaction: %v", err)
+	}
+
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE id = ?", "1").Scan(&count)
+	if err != nil {
+		t.Errorf("failed to check migration record: %v", err)
+	}
+	if count != 1 {
+		t.Error("expected migration to be recorded")
+	}
+}
+
+func TestMigrator_deleteMigrationRecord_WithDialect(t *testing.T) {
+	t.Parallel()
+
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		t.Fatalf("failed to open sqlite database: %v", err)
+	}
+	defer func() {
+		_ = db.Close()
+	}()
+	_, err = db.Exec(migrationTableSQL)
+	if err != nil {
+		t.Fatalf("failed to create schema_migrations table: %v", err)
+	}
+
+	_, err = db.Exec("INSERT INTO schema_migrations (id, description, batch) VALUES (?, ?, ?)", "1", "test", 1)
+	if err != nil {
+		t.Fatalf("failed to insert test record: %v", err)
+	}
+
+	migrator := New(db)
+	tx, _ := db.BeginTx(context.Background(), nil)
+	defer func() { _ = tx.Rollback() }()
+
+	err = migrator.deleteMigrationRecord(context.Background(), tx, "1")
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		t.Fatalf("failed to commit transaction: %v", err)
+	}
+
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE id = ?", "1").Scan(&count)
+	if err != nil {
+		t.Errorf("failed to check record existence: %v", err)
+	}
+	if count != 0 {
+		t.Error("expected record to be deleted")
+	}
+}

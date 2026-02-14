@@ -1,501 +1,353 @@
 package migrator
 
 import (
+	"errors"
+	"strings"
 	"testing"
 )
 
-func TestCreateMigration(t *testing.T) {
+func TestBaseMigration_Accessors(t *testing.T) {
 	t.Parallel()
-
-	builder := CreateMigration("1", "test migration")
-	if builder == nil {
-		t.Fatal("expected non-nil builder")
-	}
-	if builder.migration == nil {
-		t.Fatal("expected non-nil migration")
-	}
-	if builder.migration.ID() != "1" {
-		t.Errorf("expected ID '1', got '%s'", builder.migration.ID())
-	}
-	if builder.migration.Description() != "test migration" {
-		t.Errorf("expected description 'test migration', got '%s'", builder.migration.Description())
-	}
-}
-
-func TestMigrationBuilder_CreateTable(t *testing.T) {
-	t.Parallel()
-
-	builder := CreateMigration("1", "create users table")
-	migration := builder.CreateTable("users", "id INTEGER PRIMARY KEY", "name TEXT").Build()
-
-	if len(migration.Up()) != 1 {
-		t.Errorf("expected 1 up query, got %d", len(migration.Up()))
-	}
-	if len(migration.Down()) != 1 {
-		t.Errorf("expected 1 down query, got %d", len(migration.Down()))
-	}
-
-	expectedUp := "CREATE TABLE IF NOT EXISTS users (\n    id INTEGER PRIMARY KEY,\n    name TEXT\n);"
-	if migration.Up()[0] != expectedUp {
-		t.Errorf("expected up query '%s', got '%s'", expectedUp, migration.Up()[0])
-	}
-
-	expectedDown := "DROP TABLE IF EXISTS users;"
-	if migration.Down()[0] != expectedDown {
-		t.Errorf("expected down query '%s', got '%s'", expectedDown, migration.Down()[0])
-	}
-}
-
-func TestMigrationBuilder_DropTable(t *testing.T) {
-	t.Parallel()
-
-	builder := CreateMigration("1", "drop users table")
-	migration := builder.DropTable("users").Build()
-
-	if len(migration.Up()) != 1 {
-		t.Errorf("expected 1 up query, got %d", len(migration.Up()))
-	}
-	if len(migration.Down()) != 1 {
-		t.Errorf("expected 1 down query, got %d", len(migration.Down()))
-	}
-
-	expectedUp := "DROP TABLE IF EXISTS users;"
-	if migration.Up()[0] != expectedUp {
-		t.Errorf("expected up query '%s', got '%s'", expectedUp, migration.Up()[0])
-	}
-
-	expectedDown := "-- Cannot restore dropped table users"
-	if migration.Down()[0] != expectedDown {
-		t.Errorf("expected down query '%s', got '%s'", expectedDown, migration.Down()[0])
-	}
-}
-
-func TestMigrationBuilder_AddColumn(t *testing.T) {
-	t.Parallel()
-
-	builder := CreateMigration("1", "add email column")
-	migration := builder.AddColumn("users", "email VARCHAR(255)").Build()
-
-	if len(migration.Up()) != 1 {
-		t.Errorf("expected 1 up query, got %d", len(migration.Up()))
-	}
-	if len(migration.Down()) != 1 {
-		t.Errorf("expected 1 down query, got %d", len(migration.Down()))
-	}
-
-	expectedUp := "ALTER TABLE users ADD COLUMN email VARCHAR(255);"
-	if migration.Up()[0] != expectedUp {
-		t.Errorf("expected up query '%s', got '%s'", expectedUp, migration.Up()[0])
-	}
-
-	expectedDown := "ALTER TABLE users DROP COLUMN email;"
-	if migration.Down()[0] != expectedDown {
-		t.Errorf("expected down query '%s', got '%s'", expectedDown, migration.Down()[0])
-	}
-}
-
-func TestMigrationBuilder_DropColumn(t *testing.T) {
-	t.Parallel()
-
-	builder := CreateMigration("1", "drop email column")
-	migration := builder.DropColumn("users", "email").Build()
-
-	if len(migration.Up()) != 1 {
-		t.Errorf("expected 1 up query, got %d", len(migration.Up()))
-	}
-	if len(migration.Down()) != 1 {
-		t.Errorf("expected 1 down query, got %d", len(migration.Down()))
-	}
-
-	expectedUp := "ALTER TABLE users DROP COLUMN email;"
-	if migration.Up()[0] != expectedUp {
-		t.Errorf("expected up query '%s', got '%s'", expectedUp, migration.Up()[0])
-	}
-
-	expectedDown := "-- Cannot restore dropped column users.email without definition"
-	if migration.Down()[0] != expectedDown {
-		t.Errorf("expected down query '%s', got '%s'", expectedDown, migration.Down()[0])
-	}
-}
-
-func TestMigrationBuilder_RenameColumn(t *testing.T) {
-	t.Parallel()
-
-	builder := CreateMigration("1", "rename email column")
-	migration := builder.RenameColumn("users", "email", "email_address").Build()
-
-	if len(migration.Up()) != 1 {
-		t.Errorf("expected 1 up query, got %d", len(migration.Up()))
-	}
-	if len(migration.Down()) != 1 {
-		t.Errorf("expected 1 down query, got %d", len(migration.Down()))
-	}
-
-	expectedUp := "ALTER TABLE users RENAME COLUMN email TO email_address;"
-	if migration.Up()[0] != expectedUp {
-		t.Errorf("expected up query '%s', got '%s'", expectedUp, migration.Up()[0])
-	}
-
-	expectedDown := "ALTER TABLE users RENAME COLUMN email_address TO email;"
-	if migration.Down()[0] != expectedDown {
-		t.Errorf("expected down query '%s', got '%s'", expectedDown, migration.Down()[0])
-	}
-}
-
-func TestMigrationBuilder_ChangeColumn(t *testing.T) {
-	t.Parallel()
-
-	builder := CreateMigration("1", "change email column")
-	migration := builder.ChangeColumn("users", "email", "TYPE VARCHAR(500)").Build()
-
-	if len(migration.Up()) != 1 {
-		t.Errorf("expected 1 up query, got %d", len(migration.Up()))
-	}
-	if len(migration.Down()) != 1 {
-		t.Errorf("expected 1 down query, got %d", len(migration.Down()))
-	}
-
-	expectedUp := "ALTER TABLE users ALTER COLUMN email TYPE VARCHAR(500);"
-	if migration.Up()[0] != expectedUp {
-		t.Errorf("expected up query '%s', got '%s'", expectedUp, migration.Up()[0])
-	}
-
-	expectedDown := "-- Cannot reverse column change for users.email"
-	if migration.Down()[0] != expectedDown {
-		t.Errorf("expected down query '%s', got '%s'", expectedDown, migration.Down()[0])
-	}
-}
-
-func TestMigrationBuilder_CreateIndex(t *testing.T) {
-	t.Parallel()
-
-	builder := CreateMigration("1", "create index on users")
-	migration := builder.CreateIndex("idx_users_name", "users", "name").Build()
-
-	if len(migration.Up()) != 1 {
-		t.Errorf("expected 1 up query, got %d", len(migration.Up()))
-	}
-	if len(migration.Down()) != 1 {
-		t.Errorf("expected 1 down query, got %d", len(migration.Down()))
-	}
-
-	expectedUp := "CREATE INDEX idx_users_name ON users (name);"
-	if migration.Up()[0] != expectedUp {
-		t.Errorf("expected up query '%s', got '%s'", expectedUp, migration.Up()[0])
-	}
-
-	expectedDown := "DROP INDEX IF EXISTS idx_users_name;"
-	if migration.Down()[0] != expectedDown {
-		t.Errorf("expected down query '%s', got '%s'", expectedDown, migration.Down()[0])
-	}
-}
-
-func TestMigrationBuilder_CreateUniqueIndex(t *testing.T) {
-	t.Parallel()
-
-	builder := CreateMigration("1", "create unique index on users")
-	migration := builder.CreateUniqueIndex("idx_users_email", "users", "email").Build()
-
-	if len(migration.Up()) != 1 {
-		t.Errorf("expected 1 up query, got %d", len(migration.Up()))
-	}
-	if len(migration.Down()) != 1 {
-		t.Errorf("expected 1 down query, got %d", len(migration.Down()))
-	}
-
-	expectedUp := "CREATE UNIQUE INDEX idx_users_email ON users (email);"
-	if migration.Up()[0] != expectedUp {
-		t.Errorf("expected up query '%s', got '%s'", expectedUp, migration.Up()[0])
-	}
-
-	expectedDown := "DROP INDEX IF EXISTS idx_users_email;"
-	if migration.Down()[0] != expectedDown {
-		t.Errorf("expected down query '%s', got '%s'", expectedDown, migration.Down()[0])
-	}
-}
-
-func TestMigrationBuilder_DropIndex(t *testing.T) {
-	t.Parallel()
-
-	builder := CreateMigration("1", "drop index")
-	migration := builder.DropIndex("idx_users_name").Build()
-
-	if len(migration.Up()) != 1 {
-		t.Errorf("expected 1 up query, got %d", len(migration.Up()))
-	}
-	if len(migration.Down()) != 1 {
-		t.Errorf("expected 1 down query, got %d", len(migration.Down()))
-	}
-
-	expectedUp := "DROP INDEX IF EXISTS idx_users_name;"
-	if migration.Up()[0] != expectedUp {
-		t.Errorf("expected up query '%s', got '%s'", expectedUp, migration.Up()[0])
-	}
-
-	expectedDown := "-- Cannot restore dropped index idx_users_name without definition"
-	if migration.Down()[0] != expectedDown {
-		t.Errorf("expected down query '%s', got '%s'", expectedDown, migration.Down()[0])
-	}
-}
-
-func TestMigrationBuilder_AddForeignKey(t *testing.T) {
-	t.Parallel()
-
-	builder := CreateMigration("1", "add foreign key")
-	migration := builder.AddForeignKey("posts", "user_id", "users", "id").Build()
-
-	if len(migration.Up()) != 1 {
-		t.Errorf("expected 1 up query, got %d", len(migration.Up()))
-	}
-	if len(migration.Down()) != 1 {
-		t.Errorf("expected 1 down query, got %d", len(migration.Down()))
-	}
-
-	expectedUp := "ALTER TABLE posts ADD CONSTRAINT fk_posts_user_id FOREIGN KEY (user_id) REFERENCES users(id);"
-	if migration.Up()[0] != expectedUp {
-		t.Errorf("expected up query '%s', got '%s'", expectedUp, migration.Up()[0])
-	}
-
-	expectedDown := "ALTER TABLE posts DROP CONSTRAINT IF EXISTS fk_posts_user_id;"
-	if migration.Down()[0] != expectedDown {
-		t.Errorf("expected down query '%s', got '%s'", expectedDown, migration.Down()[0])
-	}
-}
-
-func TestMigrationBuilder_AddForeignKeyWithName(t *testing.T) {
-	t.Parallel()
-
-	builder := CreateMigration("1", "add named foreign key")
-	migration := builder.AddForeignKeyWithName("posts", "fk_user_id", "user_id", "users", "id").Build()
-
-	if len(migration.Up()) != 1 {
-		t.Errorf("expected 1 up query, got %d", len(migration.Up()))
-	}
-	if len(migration.Down()) != 1 {
-		t.Errorf("expected 1 down query, got %d", len(migration.Down()))
-	}
-
-	expectedUp := "ALTER TABLE posts ADD CONSTRAINT fk_user_id FOREIGN KEY (user_id) REFERENCES users(id);"
-	if migration.Up()[0] != expectedUp {
-		t.Errorf("expected up query '%s', got '%s'", expectedUp, migration.Up()[0])
-	}
-
-	expectedDown := "ALTER TABLE posts DROP CONSTRAINT IF EXISTS fk_user_id;"
-	if migration.Down()[0] != expectedDown {
-		t.Errorf("expected down query '%s', got '%s'", expectedDown, migration.Down()[0])
-	}
-}
-
-func TestMigrationBuilder_DropForeignKey(t *testing.T) {
-	t.Parallel()
-
-	builder := CreateMigration("1", "drop foreign key")
-	migration := builder.DropForeignKey("posts", "fk_user_id").Build()
-
-	if len(migration.Up()) != 1 {
-		t.Errorf("expected 1 up query, got %d", len(migration.Up()))
-	}
-	if len(migration.Down()) != 1 {
-		t.Errorf("expected 1 down query, got %d", len(migration.Down()))
-	}
-
-	expectedUp := "ALTER TABLE posts DROP CONSTRAINT IF EXISTS fk_user_id;"
-	if migration.Up()[0] != expectedUp {
-		t.Errorf("expected up query '%s', got '%s'", expectedUp, migration.Up()[0])
-	}
-
-	expectedDown := "-- Cannot restore dropped foreign key fk_user_id"
-	if migration.Down()[0] != expectedDown {
-		t.Errorf("expected down query '%s', got '%s'", expectedDown, migration.Down()[0])
-	}
-}
-
-func TestMigrationBuilder_AddPrimaryKey(t *testing.T) {
-	t.Parallel()
-
-	builder := CreateMigration("1", "add primary key")
-	migration := builder.AddPrimaryKey("users", "pk_users", "id").Build()
-
-	if len(migration.Up()) != 1 {
-		t.Errorf("expected 1 up query, got %d", len(migration.Up()))
-	}
-	if len(migration.Down()) != 1 {
-		t.Errorf("expected 1 down query, got %d", len(migration.Down()))
-	}
-
-	expectedUp := "ALTER TABLE users ADD CONSTRAINT pk_users PRIMARY KEY (id);"
-	if migration.Up()[0] != expectedUp {
-		t.Errorf("expected up query '%s', got '%s'", expectedUp, migration.Up()[0])
-	}
-
-	expectedDown := "ALTER TABLE users DROP CONSTRAINT IF EXISTS pk_users;"
-	if migration.Down()[0] != expectedDown {
-		t.Errorf("expected down query '%s', got '%s'", expectedDown, migration.Down()[0])
-	}
-}
-
-func TestMigrationBuilder_AddCheck(t *testing.T) {
-	t.Parallel()
-
-	builder := CreateMigration("1", "add check constraint")
-	migration := builder.AddCheck("users", "chk_email", "email LIKE '%@%'").Build()
-
-	if len(migration.Up()) != 1 {
-		t.Errorf("expected 1 up query, got %d", len(migration.Up()))
-	}
-	if len(migration.Down()) != 1 {
-		t.Errorf("expected 1 down query, got %d", len(migration.Down()))
-	}
-
-	expectedUp := "ALTER TABLE users ADD CONSTRAINT chk_email CHECK (email LIKE '%@%');"
-	if migration.Up()[0] != expectedUp {
-		t.Errorf("expected up query '%s', got '%s'", expectedUp, migration.Up()[0])
-	}
-
-	expectedDown := "ALTER TABLE users DROP CONSTRAINT IF EXISTS chk_email;"
-	if migration.Down()[0] != expectedDown {
-		t.Errorf("expected down query '%s', got '%s'", expectedDown, migration.Down()[0])
-	}
-}
-
-func TestMigrationBuilder_Raw(t *testing.T) {
-	t.Parallel()
-
-	builder := CreateMigration("1", "raw queries")
-	migration := builder.Raw("SELECT 1;", "SELECT 2;").Build()
-
-	if len(migration.Up()) != 1 {
-		t.Errorf("expected 1 up query, got %d", len(migration.Up()))
-	}
-	if len(migration.Down()) != 1 {
-		t.Errorf("expected 1 down query, got %d", len(migration.Down()))
-	}
-
-	if migration.Up()[0] != "SELECT 1;" {
-		t.Errorf("expected up query 'SELECT 1;', got '%s'", migration.Up()[0])
-	}
-
-	if migration.Down()[0] != "SELECT 2;" {
-		t.Errorf("expected down query 'SELECT 2;', got '%s'", migration.Down()[0])
-	}
-}
-
-func TestMigrationBuilder_RawUp(t *testing.T) {
-	t.Parallel()
-
-	builder := CreateMigration("1", "raw up query")
-	migration := builder.RawUp("SELECT 1;").Build()
-
-	if len(migration.Up()) != 1 {
-		t.Errorf("expected 1 up query, got %d", len(migration.Up()))
-	}
-	if len(migration.Down()) != 0 {
-		t.Errorf("expected 0 down queries, got %d", len(migration.Down()))
-	}
-
-	if migration.Up()[0] != "SELECT 1;" {
-		t.Errorf("expected up query 'SELECT 1;', got '%s'", migration.Up()[0])
-	}
-}
-
-func TestMigrationBuilder_RawDown(t *testing.T) {
-	t.Parallel()
-
-	builder := CreateMigration("1", "raw down query")
-	migration := builder.RawDown("SELECT 2;").Build()
-
-	if len(migration.Up()) != 0 {
-		t.Errorf("expected 0 up queries, got %d", len(migration.Up()))
-	}
-	if len(migration.Down()) != 1 {
-		t.Errorf("expected 1 down query, got %d", len(migration.Down()))
-	}
-
-	if migration.Down()[0] != "SELECT 2;" {
-		t.Errorf("expected down query 'SELECT 2;', got '%s'", migration.Down()[0])
-	}
-}
-
-func TestMigrationBuilder_Chaining(t *testing.T) {
-	t.Parallel()
-
-	builder := CreateMigration("1", "chained operations")
-	migration := builder.
-		CreateTable("users", "id INTEGER PRIMARY KEY").
-		AddColumn("users", "name TEXT").
-		CreateIndex("idx_users_name", "users", "name").
-		Build()
-
-	if len(migration.Up()) != 3 {
-		t.Errorf("expected 3 up queries, got %d", len(migration.Up()))
-	}
-	if len(migration.Down()) != 3 {
-		t.Errorf("expected 3 down queries, got %d", len(migration.Down()))
-	}
-
-	expectedUp := []string{
-		"CREATE TABLE IF NOT EXISTS users (\n    id INTEGER PRIMARY KEY\n);",
-		"ALTER TABLE users ADD COLUMN name TEXT;",
-		"CREATE INDEX idx_users_name ON users (name);",
-	}
-
-	expectedDown := []string{
-		"DROP INDEX IF EXISTS idx_users_name;",
-		"ALTER TABLE users DROP COLUMN name;",
-		"DROP TABLE IF EXISTS users;",
-	}
-
-	for i, query := range expectedUp {
-		if migration.Up()[i] != query {
-			t.Errorf("expected up query '%s' at index %d, got '%s'", query, i, migration.Up()[i])
-		}
-	}
-
-	for i, query := range expectedDown {
-		if migration.Down()[i] != query {
-			t.Errorf("expected down query '%s' at index %d, got '%s'", query, i, migration.Down()[i])
-		}
+	m := &baseMigration{
+		id:           "001",
+		description:  "create users",
+		upQueries:    []string{"CREATE TABLE users;"},
+		downQueries:  []string{"DROP TABLE users;"},
+		irreversible: true,
+		disableTx:    true,
+	}
+	if m.ID() != "001" {
+		t.Errorf("expected id %q, got %q", "001", m.ID())
+	}
+	if m.Description() != "create users" {
+		t.Errorf("expected description %q, got %q", "create users", m.Description())
+	}
+	if len(m.Up()) != 1 || m.Up()[0] != "CREATE TABLE users;" {
+		t.Errorf("unexpected Up: %v", m.Up())
+	}
+	if len(m.Down()) != 1 || m.Down()[0] != "DROP TABLE users;" {
+		t.Errorf("unexpected Down: %v", m.Down())
+	}
+	if !m.Irreversible() {
+		t.Error("expected irreversible true")
+	}
+	if !m.DisableTx() {
+		t.Error("expected disableTx true")
 	}
 }
 
 func TestBaseMigration_AddUp(t *testing.T) {
 	t.Parallel()
-
-	migration := &baseMigration{
-		upQueries: make([]string, 0),
-	}
-
-	result := migration.AddUp("SELECT 1;")
-	if result != migration {
-		t.Error("expected AddUp to return the same migration instance")
-	}
-
-	if len(migration.Up()) != 1 {
-		t.Errorf("expected 1 up query, got %d", len(migration.Up()))
-	}
-
-	if migration.Up()[0] != "SELECT 1;" {
-		t.Errorf("expected up query 'SELECT 1;', got '%s'", migration.Up()[0])
+	m := &baseMigration{}
+	m.addUp("Q1")
+	m.addUp("Q2")
+	if len(m.upQueries) != 2 || m.upQueries[0] != "Q1" || m.upQueries[1] != "Q2" {
+		t.Errorf("unexpected upQueries: %v", m.upQueries)
 	}
 }
 
 func TestBaseMigration_AddDown(t *testing.T) {
 	t.Parallel()
-
-	migration := &baseMigration{
-		downQueries: make([]string, 0),
+	m := &baseMigration{}
+	m.addDown("D1")
+	m.addDown("D2")
+	if len(m.downQueries) != 2 || m.downQueries[0] != "D2" || m.downQueries[1] != "D1" {
+		t.Errorf("expected prepend order, got %v", m.downQueries)
 	}
+}
 
-	result := migration.AddDown("SELECT 1;")
-	if result != migration {
-		t.Error("expected AddDown to return the same migration instance")
+func TestCreateMigration_Build_Success(t *testing.T) {
+	t.Parallel()
+	m, err := CreateMigration("001", "test").RawUp("SELECT 1").Build()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-
-	if len(migration.Down()) != 1 {
-		t.Errorf("expected 1 down query, got %d", len(migration.Down()))
+	if m.ID() != "001" {
+		t.Errorf("expected id %q, got %q", "001", m.ID())
 	}
+}
 
-	if migration.Down()[0] != "SELECT 1;" {
-		t.Errorf("expected down query 'SELECT 1;', got '%s'", migration.Down()[0])
+func TestCreateMigration_Build_EmptyID(t *testing.T) {
+	t.Parallel()
+	_, err := CreateMigration("", "desc").RawUp("SELECT 1").Build()
+	if err == nil || !errors.Is(err, ErrEmptyMigrationID) {
+		t.Errorf("expected ErrEmptyMigrationID, got %v", err)
+	}
+}
+
+func TestCreateMigration_Build_EmptyDescription(t *testing.T) {
+	t.Parallel()
+	_, err := CreateMigration("001", "").RawUp("SELECT 1").Build()
+	if err == nil || !errors.Is(err, ErrEmptyMigrationDescription) {
+		t.Errorf("expected ErrEmptyMigrationDescription, got %v", err)
+	}
+}
+
+func TestCreateMigration_Build_NoUpQueries(t *testing.T) {
+	t.Parallel()
+	_, err := CreateMigration("001", "desc").Build()
+	if err == nil || !errors.Is(err, ErrNoUpQueries) {
+		t.Errorf("expected ErrNoUpQueries, got %v", err)
+	}
+}
+
+func TestCreateMigration_Build_MultipleErrors(t *testing.T) {
+	t.Parallel()
+	_, err := CreateMigration("", "").Build()
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !errors.Is(err, ErrEmptyMigrationID) || !errors.Is(err, ErrEmptyMigrationDescription) || !errors.Is(err, ErrNoUpQueries) {
+		t.Errorf("expected all three errors, got %v", err)
+	}
+}
+
+func TestMustBuild_Success(t *testing.T) {
+	t.Parallel()
+	m := CreateMigration("001", "desc").RawUp("SELECT 1").MustBuild()
+	if m.ID() != "001" {
+		t.Errorf("expected id %q, got %q", "001", m.ID())
+	}
+}
+
+func TestMustBuild_Panic(t *testing.T) {
+	t.Parallel()
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic")
+		}
+		msg, ok := r.(string)
+		if !ok || !strings.Contains(msg, "migrator:") {
+			t.Errorf("unexpected panic: %v", r)
+		}
+	}()
+	CreateMigration("", "").MustBuild()
+}
+
+func TestMigrationBuilder_MarkIrreversible(t *testing.T) {
+	t.Parallel()
+	m, _ := CreateMigration("001", "d").RawUp("Q").MarkIrreversible().Build()
+	if !m.Irreversible() {
+		t.Error("expected irreversible")
+	}
+}
+
+func TestMigrationBuilder_DisableTransaction(t *testing.T) {
+	t.Parallel()
+	m, _ := CreateMigration("001", "d").RawUp("Q").DisableTransaction().Build()
+	if !m.DisableTx() {
+		t.Error("expected disableTx")
+	}
+}
+
+func TestMigrationBuilder_CreateTable(t *testing.T) {
+	t.Parallel()
+	b := CreateMigration("001", "d").CreateTable("users", "id INT", "name TEXT")
+	m, err := b.Build()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(m.Up()) != 1 || !strings.Contains(m.Up()[0], "CREATE TABLE") {
+		t.Errorf("unexpected up: %v", m.Up())
+	}
+	if len(m.Down()) != 1 || !strings.Contains(m.Down()[0], "DROP TABLE") {
+		t.Errorf("unexpected down: %v", m.Down())
+	}
+}
+
+func TestMigrationBuilder_DropTable(t *testing.T) {
+	t.Parallel()
+	b := CreateMigration("001", "d").DropTable("users")
+	m, _ := b.Build()
+	if !strings.Contains(m.Up()[0], "DROP TABLE") {
+		t.Errorf("expected DROP TABLE in up, got %v", m.Up())
+	}
+}
+
+func TestMigrationBuilder_RenameTable(t *testing.T) {
+	t.Parallel()
+	m, _ := CreateMigration("001", "d").RenameTable("old", "new").Build()
+	if !strings.Contains(m.Up()[0], "old RENAME TO new") {
+		t.Errorf("unexpected up: %v", m.Up())
+	}
+	if !strings.Contains(m.Down()[0], "new RENAME TO old") {
+		t.Errorf("unexpected down: %v", m.Down())
+	}
+}
+
+func TestMigrationBuilder_AddColumn_Valid(t *testing.T) {
+	t.Parallel()
+	m, _ := CreateMigration("001", "d").AddColumn("users", "email TEXT").Build()
+	if !strings.Contains(m.Up()[0], "ADD COLUMN email TEXT") {
+		t.Errorf("unexpected up: %v", m.Up())
+	}
+	if !strings.Contains(m.Down()[0], "DROP COLUMN email") {
+		t.Errorf("unexpected down: %v", m.Down())
+	}
+}
+
+func TestMigrationBuilder_AddColumn_InvalidDef(t *testing.T) {
+	t.Parallel()
+	_, err := CreateMigration("001", "d").AddColumn("t", "onlyname").Build()
+	if err == nil || !errors.Is(err, ErrInvalidColumnDefinition) {
+		t.Errorf("expected ErrInvalidColumnDefinition, got %v", err)
+	}
+}
+
+func TestMigrationBuilder_DropColumn(t *testing.T) {
+	t.Parallel()
+	m, _ := CreateMigration("001", "d").
+		RawUp("filler").
+		DropColumn("users", "email").Build()
+	found := false
+	for _, q := range m.Up() {
+		if strings.Contains(q, "DROP COLUMN email") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected DROP COLUMN in up queries")
+	}
+}
+
+func TestMigrationBuilder_RenameColumn(t *testing.T) {
+	t.Parallel()
+	m, _ := CreateMigration("001", "d").
+		RenameColumn("users", "old_col", "new_col").Build()
+	if !strings.Contains(m.Up()[0], "RENAME COLUMN old_col TO new_col") {
+		t.Errorf("unexpected up: %v", m.Up())
+	}
+	if !strings.Contains(m.Down()[0], "RENAME COLUMN new_col TO old_col") {
+		t.Errorf("unexpected down: %v", m.Down())
+	}
+}
+
+func TestMigrationBuilder_ChangeColumn(t *testing.T) {
+	t.Parallel()
+	m, _ := CreateMigration("001", "d").
+		ChangeColumn("users", "name", "TYPE VARCHAR(500)").Build()
+	if !strings.Contains(m.Up()[0], "ALTER COLUMN name TYPE VARCHAR(500)") {
+		t.Errorf("unexpected up: %v", m.Up())
+	}
+}
+
+func TestMigrationBuilder_CreateIndex(t *testing.T) {
+	t.Parallel()
+	m, _ := CreateMigration("001", "d").
+		CreateIndex("idx_email", "users", "email").Build()
+	if !strings.Contains(m.Up()[0], "CREATE INDEX idx_email ON users") {
+		t.Errorf("unexpected up: %v", m.Up())
+	}
+	if !strings.Contains(m.Down()[0], "DROP INDEX") {
+		t.Errorf("unexpected down: %v", m.Down())
+	}
+}
+
+func TestMigrationBuilder_CreateUniqueIndex(t *testing.T) {
+	t.Parallel()
+	m, _ := CreateMigration("001", "d").
+		CreateUniqueIndex("idx_u", "users", "email").Build()
+	if !strings.Contains(m.Up()[0], "CREATE UNIQUE INDEX") {
+		t.Errorf("unexpected up: %v", m.Up())
+	}
+}
+
+func TestMigrationBuilder_DropIndex(t *testing.T) {
+	t.Parallel()
+	m, _ := CreateMigration("001", "d").
+		DropIndex("idx_email").Build()
+	if !strings.Contains(m.Up()[0], "DROP INDEX") {
+		t.Errorf("unexpected up: %v", m.Up())
+	}
+}
+
+func TestMigrationBuilder_AddForeignKey(t *testing.T) {
+	t.Parallel()
+	m, _ := CreateMigration("001", "d").
+		AddForeignKey("orders", "user_id", "users", "id").Build()
+	if !strings.Contains(m.Up()[0], "fk_orders_user_id") {
+		t.Errorf("unexpected up: %v", m.Up())
+	}
+}
+
+func TestMigrationBuilder_AddForeignKeyWithName(t *testing.T) {
+	t.Parallel()
+	m, _ := CreateMigration("001", "d").
+		AddForeignKeyWithName("orders", "my_fk", "user_id", "users", "id").Build()
+	if !strings.Contains(m.Up()[0], "my_fk") {
+		t.Errorf("unexpected up: %v", m.Up())
+	}
+	if !strings.Contains(m.Down()[0], "DROP CONSTRAINT") {
+		t.Errorf("unexpected down: %v", m.Down())
+	}
+}
+
+func TestMigrationBuilder_DropForeignKey(t *testing.T) {
+	t.Parallel()
+	m, _ := CreateMigration("001", "d").
+		DropForeignKey("orders", "fk_orders_user").Build()
+	if !strings.Contains(m.Up()[0], "DROP CONSTRAINT") {
+		t.Errorf("unexpected up: %v", m.Up())
+	}
+}
+
+func TestMigrationBuilder_AddPrimaryKey(t *testing.T) {
+	t.Parallel()
+	m, _ := CreateMigration("001", "d").
+		AddPrimaryKey("users", "pk_users", "id").Build()
+	if !strings.Contains(m.Up()[0], "PRIMARY KEY") {
+		t.Errorf("unexpected up: %v", m.Up())
+	}
+}
+
+func TestMigrationBuilder_AddUniqueConstraint(t *testing.T) {
+	t.Parallel()
+	m, _ := CreateMigration("001", "d").
+		AddUniqueConstraint("users", "uq_email", "email").Build()
+	if !strings.Contains(m.Up()[0], "UNIQUE") {
+		t.Errorf("unexpected up: %v", m.Up())
+	}
+}
+
+func TestMigrationBuilder_AddCheck(t *testing.T) {
+	t.Parallel()
+	m, _ := CreateMigration("001", "d").
+		AddCheck("users", "ck_age", "age > 0").Build()
+	if !strings.Contains(m.Up()[0], "CHECK") {
+		t.Errorf("unexpected up: %v", m.Up())
+	}
+}
+
+func TestMigrationBuilder_CreateExtension(t *testing.T) {
+	t.Parallel()
+	m, _ := CreateMigration("001", "d").
+		CreateExtension("uuid-ossp").Build()
+	if !strings.Contains(m.Up()[0], "CREATE EXTENSION") {
+		t.Errorf("unexpected up: %v", m.Up())
+	}
+	if !strings.Contains(m.Down()[0], "DROP EXTENSION") {
+		t.Errorf("unexpected down: %v", m.Down())
+	}
+}
+
+func TestMigrationBuilder_Raw(t *testing.T) {
+	t.Parallel()
+	m, _ := CreateMigration("001", "d").
+		Raw("UP QUERY", "DOWN QUERY").Build()
+	if m.Up()[0] != "UP QUERY" {
+		t.Errorf("unexpected up: %v", m.Up())
+	}
+	if m.Down()[0] != "DOWN QUERY" {
+		t.Errorf("unexpected down: %v", m.Down())
+	}
+}
+
+func TestMigrationBuilder_RawDown(t *testing.T) {
+	t.Parallel()
+	m, _ := CreateMigration("001", "d").
+		RawUp("UP").RawDown("DOWN").Build()
+	if len(m.Down()) != 1 || m.Down()[0] != "DOWN" {
+		t.Errorf("unexpected down: %v", m.Down())
 	}
 }

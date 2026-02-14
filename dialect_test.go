@@ -2,14 +2,39 @@ package migrator
 
 import (
 	"database/sql"
+	"database/sql/driver"
+	"errors"
 	"testing"
 
 	_ "github.com/mattn/go-sqlite3"
 )
 
-func TestDialect_String(t *testing.T) {
-	t.Parallel()
+type postgresTestDriver struct{}
 
+func (d *postgresTestDriver) Open(string) (driver.Conn, error) {
+	return nil, errors.New("not implemented")
+}
+
+type mysqlTestDriver struct{}
+
+func (d *mysqlTestDriver) Open(string) (driver.Conn, error) {
+	return nil, errors.New("not implemented")
+}
+
+type unknownTestDriver struct{}
+
+func (d *unknownTestDriver) Open(string) (driver.Conn, error) {
+	return nil, errors.New("not implemented")
+}
+
+func init() {
+	sql.Register("fake_postgres_driver", &postgresTestDriver{})
+	sql.Register("fake_mysql_driver", &mysqlTestDriver{})
+	sql.Register("fake_unknown_driver", &unknownTestDriver{})
+}
+
+func TestDialect_String_AllCases(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		dialect  Dialect
@@ -19,150 +44,121 @@ func TestDialect_String(t *testing.T) {
 		{"MySQL", DialectMySQL, "MySQL"},
 		{"SQLite", DialectSQLite, "SQLite"},
 		{"Unknown", DialectUnknown, "Unknown"},
+		{"InvalidValue", Dialect(99), "Unknown"},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := tt.dialect.String(); got != tt.expected {
-				t.Errorf("expected %s, got %s", tt.expected, got)
+			got := tt.dialect.String()
+			if got != tt.expected {
+				t.Errorf("expected %q, got %q", tt.expected, got)
+			}
+		})
+	}
+}
+
+func TestDialect_QuoteIdentifier_AllDialects(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		dialect  Dialect
+		input    string
+		expected string
+	}{
+		{"MySQL_simple", DialectMySQL, "col", "`col`"},
+		{"MySQL_backtick", DialectMySQL, "co`l", "`co``l`"},
+		{"Postgres_simple", DialectPostgreSQL, "col", `"col"`},
+		{"Postgres_quote", DialectPostgreSQL, `co"l`, `"co""l"`},
+		{"SQLite_simple", DialectSQLite, "col", `"col"`},
+		{"Unknown_simple", DialectUnknown, "col", `"col"`},
+		{"MySQL_empty", DialectMySQL, "", "``"},
+		{"Postgres_empty", DialectPostgreSQL, "", `""`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := tt.dialect.QuoteIdentifier(tt.input)
+			if got != tt.expected {
+				t.Errorf("expected %q, got %q", tt.expected, got)
 			}
 		})
 	}
 }
 
 func TestDetectDialect_SQLite(t *testing.T) {
-	t.Parallel()
-
 	db, err := sql.Open("sqlite3", ":memory:")
 	if err != nil {
-		t.Fatalf("failed to open database: %v", err)
+		t.Fatalf("failed to open sqlite: %v", err)
 	}
-	defer func() {
-		_ = db.Close()
-	}()
-
-	dialect := detectDialect(db)
-	if dialect != DialectSQLite {
-		t.Errorf("expected DialectSQLite, got %v", dialect)
+	defer db.Close()
+	got := detectDialect(db)
+	if got != DialectSQLite {
+		t.Errorf("expected DialectSQLite, got %v", got)
 	}
 }
 
-func TestDialect_Placeholder(t *testing.T) {
+func TestDetectDialect_PostgreSQL(t *testing.T) {
 	t.Parallel()
+	db, err := sql.Open("fake_postgres_driver", "")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+	got := detectDialect(db)
+	if got != DialectPostgreSQL {
+		t.Errorf("expected DialectPostgreSQL, got %v", got)
+	}
+}
 
+func TestDetectDialect_MySQL(t *testing.T) {
+	t.Parallel()
+	db, err := sql.Open("fake_mysql_driver", "")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+	got := detectDialect(db)
+	if got != DialectMySQL {
+		t.Errorf("expected DialectMySQL, got %v", got)
+	}
+}
+
+func TestDetectDialect_Unknown(t *testing.T) {
+	t.Parallel()
+	db, err := sql.Open("fake_unknown_driver", "")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+	got := detectDialect(db)
+	if got != DialectUnknown {
+		t.Errorf("expected DialectUnknown, got %v", got)
+	}
+}
+
+func TestDialect_Placeholder_AllCases(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		dialect  Dialect
 		query    string
 		expected string
 	}{
-		{
-			name:     "PostgreSQL single param",
-			dialect:  DialectPostgreSQL,
-			query:    "SELECT * FROM users WHERE id = ?",
-			expected: "SELECT * FROM users WHERE id = $1",
-		},
-		{
-			name:     "PostgreSQL multiple params",
-			dialect:  DialectPostgreSQL,
-			query:    "INSERT INTO users (name, email, age) VALUES (?, ?, ?)",
-			expected: "INSERT INTO users (name, email, age) VALUES ($1, $2, $3)",
-		},
-		{
-			name:     "PostgreSQL no params",
-			dialect:  DialectPostgreSQL,
-			query:    "SELECT * FROM users",
-			expected: "SELECT * FROM users",
-		},
-		{
-			name:     "MySQL unchanged",
-			dialect:  DialectMySQL,
-			query:    "INSERT INTO users (name, email) VALUES (?, ?)",
-			expected: "INSERT INTO users (name, email) VALUES (?, ?)",
-		},
-		{
-			name:     "SQLite unchanged",
-			dialect:  DialectSQLite,
-			query:    "INSERT INTO users (name, email) VALUES (?, ?)",
-			expected: "INSERT INTO users (name, email) VALUES (?, ?)",
-		},
-		{
-			name:     "PostgreSQL complex query",
-			dialect:  DialectPostgreSQL,
-			query:    "UPDATE users SET name = ?, email = ? WHERE id = ? AND active = ?",
-			expected: "UPDATE users SET name = $1, email = $2 WHERE id = $3 AND active = $4",
-		},
+		{"NonPostgres_passthrough", DialectMySQL, "SELECT ? FROM t WHERE id = ?", "SELECT ? FROM t WHERE id = ?"},
+		{"Postgres_single", DialectPostgreSQL, "SELECT ?", "SELECT $1"},
+		{"Postgres_multiple", DialectPostgreSQL, "INSERT INTO t VALUES (?, ?, ?)", "INSERT INTO t VALUES ($1, $2, $3)"},
+		{"Postgres_no_placeholder", DialectPostgreSQL, "SELECT 1", "SELECT 1"},
+		{"Postgres_empty", DialectPostgreSQL, "", ""},
+		{"SQLite_passthrough", DialectSQLite, "SELECT ?", "SELECT ?"},
+		{"Unknown_passthrough", DialectUnknown, "SELECT ?", "SELECT ?"},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := tt.dialect.placeholder(tt.query)
-			if result != tt.expected {
-				t.Errorf("\nexpected: %s\ngot:      %s", tt.expected, result)
+			got := tt.dialect.placeholder(tt.query)
+			if got != tt.expected {
+				t.Errorf("expected %q, got %q", tt.expected, got)
 			}
 		})
-	}
-}
-
-func TestDialect_RebindQuery(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name          string
-		dialect       Dialect
-		query         string
-		args          []any
-		expectedQuery string
-		expectedArgs  []any
-	}{
-		{
-			name:          "PostgreSQL with args",
-			dialect:       DialectPostgreSQL,
-			query:         "SELECT * FROM users WHERE id = ?",
-			args:          []any{1},
-			expectedQuery: "SELECT * FROM users WHERE id = $1",
-			expectedArgs:  []any{1},
-		},
-		{
-			name:          "MySQL unchanged",
-			dialect:       DialectMySQL,
-			query:         "SELECT * FROM users WHERE id = ?",
-			args:          []any{1},
-			expectedQuery: "SELECT * FROM users WHERE id = ?",
-			expectedArgs:  []any{1},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			query, args := tt.dialect.rebindQuery(tt.query, tt.args...)
-			if query != tt.expectedQuery {
-				t.Errorf("expected query %s, got %s", tt.expectedQuery, query)
-			}
-			if len(args) != len(tt.expectedArgs) {
-				t.Errorf("expected %d args, got %d", len(tt.expectedArgs), len(args))
-			}
-		})
-	}
-}
-
-func BenchmarkDialect_Placeholder_PostgreSQL(b *testing.B) {
-	dialect := DialectPostgreSQL
-	query := "INSERT INTO users (name, email, age, city, country) VALUES (?, ?, ?, ?, ?)"
-
-	for b.Loop() {
-		_ = dialect.placeholder(query)
-	}
-}
-
-func BenchmarkDialect_Placeholder_MySQL(b *testing.B) {
-	dialect := DialectMySQL
-	query := "INSERT INTO users (name, email, age, city, country) VALUES (?, ?, ?, ?, ?)"
-
-	for b.Loop() {
-		_ = dialect.placeholder(query)
 	}
 }

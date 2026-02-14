@@ -28,11 +28,22 @@ func (d Dialect) String() string {
 	}
 }
 
+func (d Dialect) QuoteIdentifier(name string) string {
+	switch d {
+	case DialectMySQL:
+		return "`" + strings.ReplaceAll(name, "`", "``") + "`"
+	default:
+		return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
+	}
+}
+
 func detectDialect(db *sql.DB) Dialect {
 	driver := fmt.Sprintf("%T", db.Driver())
 
 	switch {
-	case strings.Contains(driver, "postgres"), strings.Contains(driver, "pq"), strings.Contains(driver, "pgx"):
+	case strings.Contains(driver, "postgres"),
+		strings.Contains(driver, "pq"),
+		strings.Contains(driver, "pgx"):
 		return DialectPostgreSQL
 	case strings.Contains(driver, "mysql"):
 		return DialectMySQL
@@ -61,8 +72,4 @@ func (d Dialect) placeholder(query string) string {
 	}
 
 	return result.String()
-}
-
-func (d Dialect) rebindQuery(query string, args ...any) (string, []any) {
-	return d.placeholder(query), args
 }
